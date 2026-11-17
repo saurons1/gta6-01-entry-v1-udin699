@@ -95,7 +95,7 @@ export class TrafficManager {
     group.position.set(start.x, 0, start.z);
     this.scene.add(group);
     this.cars.push({
-      mesh: group, wheels, loop, seg: 0,
+      mesh: group, wheels, loop, seg: 0, color,
       speed: 7 + Math.random() * 5, heading: 0, stuck: 0,
     });
   }
@@ -173,7 +173,8 @@ export class PlayerCar {
   }
 
   attach(carMesh, heading) {
-    this.mesh = carMesh.group;
+    // Traffic cars carry the mesh as `.mesh`, the parked car as `.group`.
+    this.mesh = carMesh.group ?? carMesh.mesh;
     this.wheels = carMesh.wheels;
     this.heading = heading;
     this.speed = 0;
@@ -347,6 +348,7 @@ export class Helicopter {
     this.rotor = null;
     this.angle = 0;
     this.active = false;
+    this.locked = false;
     const g = new THREE.Group();
     const body = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.6, 5.2),
       new THREE.MeshStandardMaterial({ color: 0x1c2a44, roughness: 0.4, metalness: 0.5 }));
@@ -386,11 +388,23 @@ export class Helicopter {
   setActive(on, playerPos) {
     this.active = on;
     this.mesh.visible = on;
-    if (on && playerPos) this.mesh.position.set(playerPos.x + 14, 42, playerPos.z);
+    if (on && playerPos && !this.locked) this.mesh.position.set(playerPos.x + 14, 42, playerPos.z);
+  }
+
+  // Pin the helicopter to one spot (used to stage the cover screenshot).
+  lock(x, y, z) {
+    this.locked = true;
+    this.mesh.position.set(x, y, z);
+    this.mesh.visible = true;
+    this.active = true;
   }
 
   update(dt, playerPos) {
     if (!this.active) return;
+    if (this.locked) {
+      this.rotor.rotation.y += dt * 22;
+      return;
+    }
     this.angle += dt * 0.45;
     const r = 20;
     this.mesh.position.x += ((playerPos.x + Math.cos(this.angle) * r) - this.mesh.position.x) * Math.min(1, dt * 1.2);

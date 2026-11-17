@@ -30,8 +30,10 @@ export class Hud {
     };
     this.minimap = document.getElementById('minimap');
     this.mm = this.minimap.getContext('2d');
-    this.bannerTimer = 0;
-    this.toastTimer = 0;
+    // Wall-clock timers: banners fade in real seconds even if the frame
+    // rate drops (a lagging frame must not freeze them on screen).
+    this.bannerUntil = 0;
+    this.toastUntil = 0;
     this.lastDistrict = '';
   }
 
@@ -42,13 +44,13 @@ export class Hud {
     this.el.bannerTitle.textContent = title;
     this.el.bannerSub.textContent = sub;
     this.el.banner.classList.add('show');
-    this.bannerTimer = 2.8;
+    this.bannerUntil = performance.now() + 2200;
   }
 
   toast(msg) {
     this.el.toast.textContent = msg;
     this.el.toast.classList.add('show');
-    this.toastTimer = 3.2;
+    this.toastUntil = performance.now() + 2800;
   }
 
   prompt(text) {
@@ -73,13 +75,13 @@ export class Hud {
     //      missionTitle, missionObjective, missionSub, timerText,
     //      playerX, playerZ, heading, inCar, target, traffic, police,
     //      heliActive, heliX, heliZ, goons, district }
-    if (this.bannerTimer > 0) {
-      this.bannerTimer -= dt;
-      if (this.bannerTimer <= 0) this.el.banner.classList.remove('show');
+    if (this.bannerUntil && performance.now() > this.bannerUntil) {
+      this.el.banner.classList.remove('show');
+      this.bannerUntil = 0;
     }
-    if (this.toastTimer > 0) {
-      this.toastTimer -= dt;
-      if (this.toastTimer <= 0) this.el.toast.classList.remove('show');
+    if (this.toastUntil && performance.now() > this.toastUntil) {
+      this.el.toast.classList.remove('show');
+      this.toastUntil = 0;
     }
     this.el.missionTitle.textContent = s.missionTitle;
     this.el.missionObjective.textContent = s.missionObjective + (s.timerText ? `  ${s.timerText}` : '');

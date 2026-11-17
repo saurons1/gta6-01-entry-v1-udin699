@@ -18,6 +18,7 @@ import { hasSave, saveGame, loadGame, saveSummary } from './save.js';
 const params = new URLSearchParams(window.location.search);
 const DEMO_SCENE = params.get('scene'); // chase | street | shop | drive
 const AUTO_START = params.get('autostart') === '1' || !!DEMO_SCENE;
+const LOW_FX = params.get('perf') === 'low'; // low graphics: no shadows, pixel ratio 1
 
 // ---------- game state ----------
 const state = {
@@ -32,6 +33,8 @@ const state = {
   ammo: { pistol: 0, smg: 0 },
   camYaw: Math.PI,
   camPitch: 0.32,
+  camLift: 0, // raises the camera's look-at point (cover shot tilts up to the heli)
+  demoChase: false, // cover staging: flankers + heli ride with the player
   dragTimer: 0,
   fireCooldown: 0,
   crimeCooldown: 0,
@@ -41,8 +44,8 @@ const state = {
 // ---------- three setup ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
+renderer.setPixelRatio(LOW_FX ? 1 : Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = !LOW_FX;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('app').appendChild(renderer.domElement);
 
@@ -342,29 +345,69 @@ function stealCarForDemo(x, z, heading) {
   return true;
 }
 
+// Keep the cover composition staged: in the chase demo the two flankers
+// and the helicopter ride with the player, always in frame.
+function stageChaseShot() {
+  const pp = playerPos();
+  const place = (c, x, z) => {
+    c.mesh.position.set(x, 0, z);
+    c.heading = 0;
+    c.mesh.rotation.y = 0;
+  };
+  if (police.cars[0]) place(police.cars[0], pp.x - 5.5, pp.z + 10);
+  if (police.cars[1]) place(police.cars[1], pp.x + 5.5, pp.z + 16);
+  heli.lock(pp.x - 2, 18, pp.z + 40);
+}
+
 function setupDemoScene(name) {
   if (name === 'chase') {
-    // sunset boulevard car chase: player driving, 4-star heat, police + heli
-    if (stealCarForDemo(0, 120, Math.PI)) playerCar.speed = 26;
+    // sunset boulevard car chase: player driving south toward the sea and
+    // the sunset, 4-star heat, police + helicopter in pursuit
+    if (stealCarForDemo(0, 100, 0)) {
+      playerCar.speed = 26;
+      // bright hero car so it reads at small size
+      playerCar.mesh.children[0].material.color.setHex(0xe84a2e);
+    }
     setWanted(4);
+    // stage two police cars flanking ahead of the player (light bars visible)
+    police.setWanted(4, playerPos());
+    const p = playerPos();
+    if (police.cars[0]) {
+      police.cars[0].mesh.position.set(p.x - 5.5, 0, p.z + 10);
+      police.cars[0].heading = 0;
+    }
+    if (police.cars[1]) {
+      police.cars[1].mesh.position.set(p.x + 5.5, 0, p.z + 16);
+      police.cars[1].heading = 0;
+    }
+    // helicopter low ahead over the boulevard, in frame
+    heli.lock(p.x - 2, 18, p.z + 40);
+    state.demoChase = true;
     state.camYaw = Math.PI;
     state.camPitch = 0.3;
+    state.camLift = 2;
   } else if (name === 'street') {
-    // on-foot mission moment at the plaza
+    // on-foot mission moment at the plaza: Leo in the open plaza block,
+    // goons at the fountain ahead, camera clear of the buildings
     missions.index = 2; missions.stage = 1; missions.stageStarted = false;
-    player.x = 8; player.z = 14;
+    player.x = 0; player.z = -10;
     player.heading = Math.PI;
-    state.camYaw = 0.4;
+    state.camYaw = 0;
+    state.camPitch = 0.35;
     setWanted(1);
   } else if (name === 'shop') {
-    // neon street by the spray shop
-    player.x = -128; player.z = 112;
-    player.heading = 2.4;
-    state.camYaw = -0.7;
+    // neon street: Leo on the road south of Spray & Shine, sign in frame
+    player.x = -140; player.z = 160;
+    player.heading = Math.PI;
+    state.camYaw = 0;
+    state.camPitch = 0.15;
     setWanted(0);
   } else if (name === 'drive') {
-    // golden-hour cruise down the beach boulevard
-    if (stealCarForDemo(-60, 160, 0)) playerCar.speed = 18;
+    // golden-hour cruise down the beach boulevard, sunset ahead
+    if (stealCarForDemo(-40, 120, 0)) {
+      playerCar.speed = 18;
+      playerCar.mesh.children[0].material.color.setHex(0xe8b13c);
+    }
     state.camYaw = Math.PI;
   }
 }
@@ -401,7 +444,7 @@ function updateCamera(dt) {
   let finalDist = len;
   if (hits.length > 0) finalDist = Math.max(2.2, hits[0].distance - 0.6);
   camera.position.copy(target).addScaledVector(dir.normalize(), finalDist);
-  camera.lookAt(target.x, target.y + 0.4, target.z);
+  camera.lookAt(target.x, target.y + 0.4 + state.camLift, target.z);
 }
 
 // ---------- main loop ----------
@@ -474,6 +517,7 @@ function frame() {
     police.update(dt, playerPos(), speedMph() / 2.24, state.inCar, onBusted);
     heli.setActive(state.wanted >= 3, playerPos());
     heli.update(dt, playerPos());
+    if (state.demoChase) stageChaseShot();
     audio.setSiren(police.count > 0);
     traffic.update(dt, playerPos(), effects);
     peds.update(dt);
@@ -560,7 +604,7 @@ function shopHooks() {
 
 // debug / test handle (used by the maker's own playtests)
 window.__game = {
-  state, player, playerCar, missions, traffic, police, heli,
+  state, player, playerCar, missions, traffic, police, heli, input, renderer,
   setWanted, addWanted,
   teleport(x, z) { player.x = x; player.z = z; if (playerCar.mesh) { playerCar.mesh.position.x = x; playerCar.mesh.position.z = z; } },
   giveCash(n) { state.cash += n; },

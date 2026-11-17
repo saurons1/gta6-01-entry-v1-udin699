@@ -22,11 +22,11 @@ function canvasTexture(w, h, draw) {
 function windowTexture(base, lit) {
   return canvasTexture(128, 256, (g, w, h) => {
     g.fillStyle = base; g.fillRect(0, 0, w, h);
-    for (let y = 12; y < h - 10; y += 22) {
-      for (let x = 10; x < w - 10; x += 20) {
+    for (let y = 10; y < h - 8; y += 18) {
+      for (let x = 8; x < w - 8; x += 16) {
         const on = Math.random() < lit;
-        g.fillStyle = on ? '#ffd98a' : '#1d2436';
-        g.fillRect(x, y, 12, 14);
+        g.fillStyle = on ? '#ffd98a' : '#232c42';
+        g.fillRect(x, y, 9, 11);
       }
     }
     g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, h - 14, w, 14);
@@ -36,9 +36,11 @@ function windowTexture(base, lit) {
 function roadTexture() {
   return canvasTexture(128, 128, (g, w, h) => {
     g.fillStyle = '#2b2b33'; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#3a3a44'; g.fillRect(0, 0, 6, h); g.fillRect(w - 6, 0, 6, h);
-    g.fillStyle = '#e8c85a'; g.fillRect(w / 2 - 2, 8, 4, 40);
-    g.fillStyle = '#e8c85a'; g.fillRect(w / 2 - 2, 72, 4, 40);
+    // edge lines run along the road (u axis), at the v edges
+    g.fillStyle = '#3a3a44'; g.fillRect(0, 0, w, 6); g.fillRect(0, h - 6, w, 6);
+    // centre dashes along the road
+    g.fillStyle = '#e8c85a'; g.fillRect(8, h / 2 - 2, 40, 4);
+    g.fillStyle = '#e8c85a'; g.fillRect(72, h / 2 - 2, 40, 4);
   });
 }
 
@@ -86,7 +88,7 @@ export function buildCity(scene) {
   // ---- sky, sun, fog ----
   scene.background = new THREE.Color(0xff8c4a);
   scene.fog = new THREE.Fog(0xe88a52, 180, 620);
-  const sun = new THREE.DirectionalLight(0xffb36b, 2.4);
+  const sun = new THREE.DirectionalLight(0xffb36b, 2.7);
   sun.position.set(60, 90, 320);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -94,7 +96,7 @@ export function buildCity(scene) {
   sun.shadow.camera.top = 220; sun.shadow.camera.bottom = -220;
   sun.shadow.camera.far = 800;
   scene.add(sun);
-  scene.add(new THREE.HemisphereLight(0xffd9a8, 0x3a2a4a, 0.9));
+  scene.add(new THREE.HemisphereLight(0xffd9a8, 0x4a3a5a, 1.35));
   // low sun disc over the sea
   const sunDisc = new THREE.Mesh(
     new THREE.CircleGeometry(26, 32),
@@ -177,8 +179,11 @@ export function buildCity(scene) {
         const w = 14 + Math.random() * 10;
         const d = 14 + Math.random() * 10;
         const h = 12 + Math.random() * 34;
-        const ox = (i === 0 ? -6 : 7) + (Math.random() * 4 - 2);
-        const oz = (Math.random() * 8 - 4);
+        // keep the whole footprint inside the 40-wide block, off the roads
+        const maxOffX = Math.max(0, 20 - w / 2 - 2);
+        const maxOffZ = Math.max(0, 20 - d / 2 - 2);
+        const ox = THREE.MathUtils.clamp((i === 0 ? -6 : 7) + (Math.random() * 4 - 2), -maxOffX, maxOffX);
+        const oz = THREE.MathUtils.clamp(Math.random() * 8 - 4, -maxOffZ, maxOffZ);
         const x = bx + ox, z = bz + oz;
         const tex = winTexes[Math.floor(Math.random() * winTexes.length)];
         const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
@@ -222,7 +227,8 @@ export function buildCity(scene) {
     if (signText) {
       const smat = new THREE.MeshBasicMaterial({ map: signTexture(signText, signFg, signBg) });
       const sign = new THREE.Mesh(new THREE.PlaneGeometry(18, 4.5), smat);
-      sign.position.set(x, h + 0.5, z + d / 2 + 0.2);
+      // centred on the facade so it reads from the street, not over the roof
+      sign.position.set(x, h * 0.62, z + d / 2 + 0.2);
       scene.add(sign);
       city.neonMats.push(smat);
     }
@@ -322,7 +328,7 @@ export function buildCity(scene) {
     beach: { x: -60, z: 178, label: 'Playa Verde' },
     marina: { x: 60, z: 196, label: 'Marina' },
     northGate: { x: 0, z: -160, label: 'North gate' },
-    playerSpawn: { x: -120, z: -100, label: 'Westside' },
+    playerSpawn: { x: -120, z: -120, label: 'Westside' },
   };
 
   // ---- per-frame life: sea shimmer, neon flicker, palm sway ----

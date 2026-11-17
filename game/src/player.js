@@ -52,7 +52,7 @@ export class Player {
     this.mesh = this.parts.group;
     scene.add(this.mesh);
     this.x = -120;
-    this.z = -100;
+    this.z = -120;
     this.heading = 0;
     this.walkPhase = 0;
     this.health = 100;
