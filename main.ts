@@ -8,7 +8,7 @@
 // the dossier is a pure function of the files it reads.
 
 import { buildDossier } from './vendor/makefun-game.ts';
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -34,10 +34,14 @@ function main(): void {
   }
 
   // Fresh output every run, so a second run writes exactly the same bytes.
-  // The wipe is scoped to the output directory alone; the repository is
-  // never written to (the grader mounts it read-only).
-  rmSync(OUTPUT_DIR, { recursive: true, force: true });
+  // The wipe is scoped to the output directory's contents alone: the
+  // directory itself is never removed, because the grader mounts it as a
+  // volume and removing a mount point fails with "Device or resource busy".
+  // The repository is never written to (the grader mounts it read-only).
   mkdirSync(OUTPUT_DIR, { recursive: true });
+  for (const entry of readdirSync(OUTPUT_DIR)) {
+    rmSync(join(OUTPUT_DIR, entry), { recursive: true, force: true });
+  }
   cpSync(gameSrc, join(OUTPUT_DIR, 'game'), { recursive: true });
   cpSync(shotsSrc, join(OUTPUT_DIR, 'screenshots'), { recursive: true });
 
